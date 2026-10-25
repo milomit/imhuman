@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "humanid",
+  "name": "imhuman",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -21,12 +21,12 @@
   ],
   "triggers": { "crons": ["17 3 * * *"] },
   "vars": {
-    "RP_NAME": "Human ID",
+    "RP_NAME": "I'm Human",
     // The live site's address. Passkeys are locked to RP_ID, so set this before real people sign up.
     // Local development overrides both in .dev.vars (written by `npm run setup`).
-    "RP_ID": "humanid.milomitm.workers.dev",
-    "ORIGIN": "https://humanid.milomitm.workers.dev",
-    "VAPID_SUBJECT": "https://github.com/milomit/humanid"
+    "RP_ID": "imhuman.milomitm.workers.dev",
+    "ORIGIN": "https://imhuman.milomitm.workers.dev",
+    "VAPID_SUBJECT": "https://github.com/milomit/imhuman"
   }
   // Secrets (RECEIPT_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY) live in .dev.vars locally.
   // For production: `npm run setup -- --production secrets.json`, then `npx wrangler secret bulk secrets.json`.

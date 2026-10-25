@@ -253,7 +253,7 @@ function viewLanding() {
   if (me) return navigate('/home', true);
   app.innerHTML = `
     <h1>Prove you're human. Anywhere.</h1>
-    <p class="lead">AI can fake a voice, a face, and a whole conversation. Human ID gives you a handle anyone can ask you to prove, and your face answers.</p>
+    <p class="lead">AI can fake a voice, a face, and a whole conversation. I'm Human gives you a handle anyone can ask you to prove, and your face answers.</p>
     <ol class="steps">
       <li><strong>Get a handle.</strong> Like @poopsocket123. No name, no email, no photo.</li>
       <li><strong>Share it anywhere.</strong> On a call, in a DM, in your bio.</li>
@@ -261,7 +261,7 @@ function viewLanding() {
     </ol>
     ${supported() ? '' : '<div class="card warn"><p>This browser can\'t use passkeys. Open this page in Safari on iPhone or Chrome on Android.</p></div>'}
     <div class="stack">
-      <a class="btn primary block" href="/join" data-link>Create your Human ID</a>
+      <a class="btn primary block" href="/join" data-link>Get your handle</a>
       <button class="block" id="signin">I already have one</button>
     </div>
     <p class="faint center pad">Your face never leaves your phone. <a href="/how" data-link>How it works, and what it can't do</a></p>`;
@@ -344,7 +344,7 @@ async function viewHome() {
           <button class="small grow" id="copy-link">Copy link</button>
           <button class="small grow" id="show-qr">Show QR code</button>
         </div>
-        <img class="qr hidden" id="qr" alt="QR code for your Human ID page">
+        <img class="qr hidden" id="qr" alt="QR code for your I'm Human page">
       </div>
     </section>
 
@@ -375,7 +375,7 @@ async function viewHome() {
     ${push === 'ios-install' ? `
     <section class="card">
       <h3>Want alerts on iPhone?</h3>
-      <p class="muted small">Tap the Share button, then "Add to Home Screen". Open Human ID from there and turn on alerts.</p>
+      <p class="muted small">Tap the Share button, then "Add to Home Screen". Open I'm Human from there and turn on alerts.</p>
     </section>` : ''}
 
     <section class="card">
@@ -457,7 +457,7 @@ async function viewCheck(id) {
           <section class="card">
             <h3>On a call? Say these three words:</h3>
             <div class="code" id="words">${esc(showCode(check.code))}</div>
-            <p class="muted small">${check.to ? `@${esc(check.to)} types them into Human ID and confirms with their face.` : 'They type them into Human ID and confirm with their face.'} Only the person who heard you can answer.</p>
+            <p class="muted small">${check.to ? `@${esc(check.to)} types them into I'm Human and confirms with their face.` : 'They type them into I\'m Human and confirm with their face.'} Only the person who heard you can answer.</p>
           </section>
           <section class="card">
             <h3>In a chat? Send this link instead:</h3>
@@ -519,7 +519,7 @@ async function viewCheck(id) {
           ? `<p class="muted">It takes a few seconds: sign in, glance at your phone, done. Expires in <strong id="left">${clock(left())}</strong>.</p>
              <div class="stack">
                <button class="primary block" id="signin">Sign in to answer</button>
-               ${check.to ? '' : '<a class="btn block" href="/join" data-link>Create a Human ID to answer</a>'}
+               ${check.to ? '' : '<a class="btn block" href="/join" data-link>Get a handle to answer</a>'}
              </div>`
           : `<div class="card"><p>This check is ${esc(check.status)}.</p></div>`}`;
       $('#signin')?.addEventListener('click', (e) => signIn(e.currentTarget));
@@ -612,25 +612,25 @@ async function viewProfile(rawHandle) {
     p = await api('GET', `/api/users/${encodeURIComponent(handle)}`);
   } catch (err) {
     if (err.status !== 404) throw err;
-    app.innerHTML = `<h1>@${esc(handle)} isn't a Human ID</h1><p class="muted">Nobody has that handle. If someone told you it's theirs, be careful.</p>`;
+    app.innerHTML = `<h1>@${esc(handle)} isn't on I'm Human</h1><p class="muted">Nobody has that handle. If someone told you it's theirs, be careful.</p>`;
     return;
   }
   const since = new Date(`${p.since}-01T00:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   const badgeUrl = `${config.origin}/api/badge/${p.handle}.svg`;
-  const snippet = `<a href="${config.origin}/u/${p.handle}"><img src="${badgeUrl}" alt="@${p.handle} on Human ID"></a>`;
+  const snippet = `<a href="${config.origin}/u/${p.handle}"><img src="${badgeUrl}" alt="@${p.handle} on I'm Human"></a>`;
   app.innerHTML = `
     <section class="card">
       <p class="big-handle">@${esc(p.handle)}</p>
       <div class="row wrap">${pill(p.freshness)}</div>
       <ul class="facts">
-        <li>Human ID since ${esc(since)}</li>
+        <li>On I'm Human since ${esc(since)}</li>
         <li>Passed ${p.checksPassed} check${p.checksPassed === 1 ? '' : 's'}</li>
       </ul>
       ${KEY[p.keyType] ? `<p class="faint" data-mt>${KEY[p.keyType]}</p>` : ''}
     </section>
     ${!me ? `
-      <p class="muted">Want to check that @${esc(p.handle)} is a live human right now? You need your own Human ID first. It takes a minute.</p>
-      <a class="btn primary block" href="/join" data-link>Create your Human ID</a>` : ''}
+      <p class="muted">Want to check that @${esc(p.handle)} is a live human right now? You need your own handle first. It takes a minute.</p>
+      <a class="btn primary block" href="/join" data-link>Get your handle</a>` : ''}
     ${me && p.isMe ? `
       <section class="card">
         <h2>This is you</h2>
@@ -692,7 +692,7 @@ async function viewSettings() {
       <h2>Alerts</h2>
       ${push === 'ok' ? `<p class="muted small">${subscribed ? 'Alerts are on for this device.' : 'Alerts are off for this device.'}</p>
         <button class="small" id="push">${subscribed ? 'Turn off alerts' : 'Turn on alerts'}</button>` : ''}
-      ${push === 'ios-install' ? '<p class="muted small">On iPhone, add Human ID to your Home Screen (Share, then "Add to Home Screen") to get alerts.</p>' : ''}
+      ${push === 'ios-install' ? '<p class="muted small">On iPhone, add I\'m Human to your Home Screen (Share, then "Add to Home Screen") to get alerts.</p>' : ''}
       ${push === 'denied' ? '<p class="muted small">Alerts are blocked in your browser settings for this site.</p>' : ''}
       ${push === 'unsupported' || push === 'server-off' ? '<p class="muted small">Alerts aren\'t available here.</p>' : ''}
     </section>
@@ -705,7 +705,7 @@ async function viewSettings() {
 
     <div class="stack">
       <button class="block" id="logout">Sign out</button>
-      <button class="danger block" id="delete">Delete my Human ID</button>
+      <button class="danger block" id="delete">Delete my handle</button>
     </div>`;
 
   $$('input[name=policy]').forEach((r) => r.addEventListener('change', async () => {
@@ -734,7 +734,7 @@ async function viewSettings() {
   $('#delete').addEventListener('click', async (e) => {
     if (!confirm(`Delete @${me.handle} for good? Nobody, including you, can ever use this handle again.`)) return;
     const ok = await busy(e.currentTarget, () => withFreshFace(() => api('POST', '/api/me/delete')));
-    if (ok) { me = null; toast('Your Human ID is deleted'); navigate('/'); }
+    if (ok) { me = null; toast('Your handle is deleted'); navigate('/'); }
   });
 }
 

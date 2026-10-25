@@ -78,7 +78,7 @@ export const fail = (status, code, message) => {
 
 const RESERVED = new Set([
   'admin', 'api', 'app', 'about', 'help', 'home', 'how', 'join', 'login', 'logout', 'me', 'settings',
-  'support', 'verify', 'official', 'staff', 'team', 'root', 'system', 'security', 'humanid', 'human',
+  'support', 'verify', 'official', 'staff', 'team', 'root', 'system', 'security', 'humanid', 'human', 'imhuman', 'im_human', 'iamhuman',
   'null', 'undefined', 'www',
 ]);
 

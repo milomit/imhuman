@@ -17,7 +17,7 @@ export const supported = () => Boolean(window.PublicKeyCredential && navigator.c
 
 function friendly(err) {
   if (err?.name === 'NotAllowedError') return new Error('Face check was cancelled or timed out.');
-  if (err?.name === 'InvalidStateError') return new Error('This device already has a passkey for this Human ID.');
+  if (err?.name === 'InvalidStateError') return new Error('This device already has a passkey for this handle.');
   if (err?.name === 'SecurityError') return new Error("Passkeys don't work on this address. Open the site from its real domain.");
   return err instanceof Error ? err : new Error(String(err));
 }

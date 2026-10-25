@@ -7,9 +7,9 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: 'Human ID', body: event.data?.text() };
+    data = { title: "I'm Human", body: event.data?.text() };
   }
-  event.waitUntil(self.registration.showNotification(data.title || 'Human ID', {
+  event.waitUntil(self.registration.showNotification(data.title || "I'm Human", {
     body: data.body || '',
     tag: data.tag,
     renotify: true,

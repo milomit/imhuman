@@ -131,8 +131,8 @@ export async function authenticationOptions(env, userId = null) {
 // Verifies a fresh passkey signature with user verification (face, fingerprint, or device passcode).
 export async function verifyAssertion(env, ceremony, response, { userId = null } = {}) {
   const cred = await env.DB.prepare('SELECT * FROM credentials WHERE id = ?').bind(String(response?.id ?? '')).first();
-  if (!cred) fail(400, 'unknown_passkey', "That passkey isn't linked to any Human ID.");
-  if (userId && cred.user_id !== userId) fail(403, 'wrong_account', 'That passkey belongs to a different Human ID.');
+  if (!cred) fail(400, 'unknown_passkey', "That passkey isn't linked to any handle here.");
+  if (userId && cred.user_id !== userId) fail(403, 'wrong_account', 'That passkey belongs to a different handle.');
   let result;
   try {
     result = await verifyAuthenticationResponse({

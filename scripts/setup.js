@@ -11,7 +11,7 @@ async function p256() {
 
 const receipt = await p256();
 const receiptJwk = await crypto.subtle.exportKey('jwk', receipt.privateKey);
-receiptJwk.kid = `hid-${new Date().toISOString().slice(0, 10)}-${b64url(crypto.getRandomValues(new Uint8Array(4)))}`;
+receiptJwk.kid = `imh-${new Date().toISOString().slice(0, 10)}-${b64url(crypto.getRandomValues(new Uint8Array(4)))}`;
 
 const vapid = await p256();
 const vapidJwk = await crypto.subtle.exportKey('jwk', vapid.privateKey);

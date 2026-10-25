@@ -24,7 +24,7 @@ app.onError((err, c) => {
 app.use('/api/*', async (c, next) => {
   // Every state-changing request must come from our own pages (blocks cross-site request forgery).
   if (c.req.method !== 'GET' && c.req.header('Origin') !== c.env.ORIGIN) {
-    fail(403, 'bad_origin', 'Requests must come from the Human ID site.');
+    fail(403, 'bad_origin', "Requests must come from the I'm Human site.");
   }
   await next();
   c.header('Cache-Control', 'no-store');
@@ -52,7 +52,7 @@ function requireRecent(session) {
 async function userByHandle(env, raw) {
   const handle = normalizeHandle(raw);
   const user = await env.DB.prepare('SELECT * FROM users WHERE handle = ?').bind(handle).first();
-  if (!user) fail(404, 'no_such_handle', `There's no Human ID called @${handle}.`);
+  if (!user) fail(404, 'no_such_handle', `Nobody on I'm Human is called @${handle}.`);
   return user;
 }
 
@@ -188,7 +188,7 @@ app.post('/api/presence/finish', async (c) => {
   const session = await requireSession(c);
   const { ceremonyId, response } = await body(c);
   const ceremony = await takeCeremony(c.env, ceremonyId, 'presence');
-  if (ceremony.user_id !== session.user.id) fail(403, 'wrong_account', 'That request belongs to a different Human ID.');
+  if (ceremony.user_id !== session.user.id) fail(403, 'wrong_account', 'That request belongs to a different handle.');
   await verifyAssertion(c.env, ceremony, response, { userId: session.user.id });
   await markPresent(c.env, session.user.id, session.tokenHash);
   const t = now();
@@ -219,7 +219,7 @@ app.post('/api/passkeys/finish', async (c) => {
   const session = await requireSession(c);
   const { ceremonyId, response } = await body(c);
   const ceremony = await takeCeremony(c.env, ceremonyId, 'add-passkey');
-  if (ceremony.user_id !== session.user.id) fail(403, 'wrong_account', 'That request belongs to a different Human ID.');
+  if (ceremony.user_id !== session.user.id) fail(403, 'wrong_account', 'That request belongs to a different handle.');
   const cred = await verifyRegistration(c.env, ceremony, response);
   await insertCredential(c.env, session.user.id, cred);
   return c.json({ ok: true });

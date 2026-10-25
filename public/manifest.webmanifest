@@ -1,6 +1,6 @@
 {
-  "name": "Human ID",
-  "short_name": "Human ID",
+  "name": "I'm Human",
+  "short_name": "I'm Human",
   "description": "Prove you're human, anywhere.",
   "start_url": "/home",
   "scope": "/",

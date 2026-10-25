@@ -1,8 +1,8 @@
-# Human ID
+# I'm Human
 
-**Prove you're human. Anywhere.** Try it: **https://humanid.milomitm.workers.dev**
+**Prove you're human. Anywhere.** Try it: **https://imhuman.milomitm.workers.dev**
 
-AI can now fake a voice, a face, and a whole conversation. Human ID gives you a handle, like `@poopsocket123`, that anyone can ask you to prove. You glance at your phone, say three words back, and they see that a live human answered.
+AI can now fake a voice, a face, and a whole conversation. I'm Human gives you a handle, like `@poopsocket123`, that anyone can ask you to prove. You glance at your phone, say three words back, and they see that a live human answered.
 
 It works next to any channel (phone calls, DMs, dating apps, email), so it needs no deals with Apple, Google, or phone carriers. It's free, open source, and collects no names, emails, phone numbers, or photos.
 
@@ -96,7 +96,7 @@ Everything runs on Cloudflare's free tier: Workers, D1 database, static files, a
    ```bash
    npm run deploy
    ```
-7. In the Cloudflare dashboard, open the `humanid` Worker, then Settings, then Domains & Routes, and add your domain as a Custom Domain.
+7. In the Cloudflare dashboard, open the `imhuman` Worker, then Settings, then Domains & Routes, and add your domain as a Custom Domain.
 
 ## Build on it
 
@@ -112,7 +112,7 @@ Other sites and apps can use these public endpoints:
 Badge example:
 
 ```html
-<a href="https://example.com/u/poopsocket123"><img src="https://example.com/api/badge/poopsocket123.svg" alt="@poopsocket123 on Human ID"></a>
+<a href="https://example.com/u/poopsocket123"><img src="https://example.com/api/badge/poopsocket123.svg" alt="@poopsocket123 on I'm Human"></a>
 ```
 
 ## Roadmap

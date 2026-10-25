@@ -1,4 +1,4 @@
-// Draws the Human ID mark (a face inside scan brackets) as SVG and as PNGs, with no image libraries.
+// Draws the I'm Human mark (a face inside scan brackets) as SVG and as PNGs, with no image libraries.
 import { writeFileSync } from 'node:fs';
 import { deflateSync, crc32 } from 'node:zlib';
 
