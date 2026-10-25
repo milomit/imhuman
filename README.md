@@ -1,6 +1,6 @@
 # Human ID
 
-**Prove you're human. Anywhere.**
+**Prove you're human. Anywhere.** Try it: **https://humanid.milomitm.workers.dev**
 
 AI can now fake a voice, a face, and a whole conversation. Human ID gives you a handle, like `@poopsocket123`, that anyone can ask you to prove. You glance at your phone, say three words back, and they see that a live human answered.
 
@@ -81,14 +81,16 @@ Everything runs on Cloudflare's free tier: Workers, D1 database, static files, a
    ```bash
    npx wrangler d1 create humanid
    ```
-3. In `wrangler.jsonc`, set `RP_ID` to your domain (`example.com`), `ORIGIN` to `https://example.com`, and `VAPID_SUBJECT` to a contact address (`mailto:you@example.com`).
+3. In `wrangler.jsonc`, set `RP_ID` to your domain (`example.com`), `ORIGIN` to `https://example.com`, and `VAPID_SUBJECT` to a contact URL or `mailto:` address. (Your first deploy prints a free `*.workers.dev` address you can use until you have a domain.)
 4. Create the tables:
    ```bash
    npx wrangler d1 migrations apply humanid --remote
    ```
-5. Make production keys, then store each one with `npx wrangler secret put <NAME>`:
+5. Make production keys, upload them, and delete the file:
    ```bash
-   npm run setup -- --force --print
+   npm run setup -- --production secrets.json
+   npx wrangler secret bulk secrets.json
+   rm secrets.json
    ```
 6. Deploy:
    ```bash

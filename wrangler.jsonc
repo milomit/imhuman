@@ -14,19 +14,20 @@
     {
       "binding": "DB",
       "database_name": "humanid",
-      // Replace with the id printed by `npx wrangler d1 create humanid` before deploying.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // If you fork this, replace with the id printed by `npx wrangler d1 create humanid`.
+      "database_id": "f036a619-6fff-452b-b638-2cdb38e53a92",
       "migrations_dir": "migrations"
     }
   ],
   "triggers": { "crons": ["17 3 * * *"] },
   "vars": {
     "RP_NAME": "Human ID",
-    // For production, set these to your domain, e.g. RP_ID "example.com" and ORIGIN "https://example.com".
-    "RP_ID": "localhost",
-    "ORIGIN": "http://localhost:8787",
-    "VAPID_SUBJECT": "mailto:hello@example.com"
+    // The live site's address. Passkeys are locked to RP_ID, so set this before real people sign up.
+    // Local development overrides both in .dev.vars (written by `npm run setup`).
+    "RP_ID": "humanid.milomitm.workers.dev",
+    "ORIGIN": "https://humanid.milomitm.workers.dev",
+    "VAPID_SUBJECT": "https://github.com/milomit/humanid"
   }
-  // Secrets (RECEIPT_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY) live in .dev.vars locally
-  // and are set with `npx wrangler secret put <NAME>` in production. Run `npm run setup` to create them.
+  // Secrets (RECEIPT_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY) live in .dev.vars locally.
+  // For production: `npm run setup -- --production secrets.json`, then `npx wrangler secret bulk secrets.json`.
 }

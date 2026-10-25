@@ -1,5 +1,5 @@
 // Creates the signing keys the server needs and writes them to .dev.vars for local development.
-// For production, it prints the `wrangler secret put` commands to run with the same values.
+// With `--production <file>`, writes fresh keys to a JSON file for `npx wrangler secret bulk <file>` instead.
 import { existsSync, writeFileSync } from 'node:fs';
 import { webcrypto as crypto } from 'node:crypto';
 
@@ -23,15 +23,18 @@ const vars = {
   VAPID_PRIVATE_KEY: JSON.stringify(vapidJwk),
 };
 
-const force = process.argv.includes('--force');
-if (existsSync('.dev.vars') && !force) {
-  console.log('.dev.vars already exists. Run `npm run setup -- --force` to replace it.');
-} else {
-  writeFileSync('.dev.vars', Object.entries(vars).map(([k, v]) => `${k}='${v}'`).join('\n') + '\n');
-  console.log('Wrote .dev.vars with fresh keys for local development.');
+const prodIndex = process.argv.indexOf('--production');
+if (prodIndex !== -1) {
+  const file = process.argv[prodIndex + 1] ?? 'secrets.json';
+  writeFileSync(file, JSON.stringify(vars, null, 2), { mode: 0o600 });
+  console.log(`Wrote production keys to ${file}. Upload with \`npx wrangler secret bulk ${file}\`, then delete the file.`);
+  process.exit(0);
 }
 
-if (process.argv.includes('--print')) {
-  console.log('\nFor production, run each of these and paste the value when asked:\n');
-  for (const [k, v] of Object.entries(vars)) console.log(`npx wrangler secret put ${k}\n  ${v}\n`);
+const local = { RP_ID: 'localhost', ORIGIN: 'http://localhost:8787', ...vars };
+if (existsSync('.dev.vars') && !process.argv.includes('--force')) {
+  console.log('.dev.vars already exists. Run `npm run setup -- --force` to replace it.');
+} else {
+  writeFileSync('.dev.vars', Object.entries(local).map(([k, v]) => `${k}='${v}'`).join('\n') + '\n');
+  console.log('Wrote .dev.vars with fresh keys for local development.');
 }

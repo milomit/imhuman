@@ -8,6 +8,8 @@ import { verifyReceipt } from '../public/passkey.js';
 const BASE = process.env.BASE ?? 'http://localhost:8787';
 const RP_ID = new URL(BASE).hostname;
 const RUN = Math.random().toString(36).slice(2, 7);
+// Locally, a random fake IP keeps each run inside its own rate-limit window. Cloudflare rejects this header in production.
+const LOCAL = ['localhost', '127.0.0.1'].includes(RP_ID);
 const FAKE_IP = `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
 
 class Client {
@@ -21,7 +23,7 @@ class Client {
       method,
       headers: {
         ...(method === 'GET' ? {} : { 'Content-Type': 'application/json', Origin: origin }),
-        'CF-Connecting-IP': FAKE_IP,
+        ...(LOCAL ? { 'CF-Connecting-IP': FAKE_IP } : {}),
         ...(this.cookie ? { Cookie: this.cookie } : {}),
       },
       body: method === 'GET' ? undefined : JSON.stringify(data ?? {}),
