@@ -4,13 +4,14 @@ import {
   createSession, endSession, currentSession, startCeremony, takeCeremony, registrationOptions,
   verifyRegistration, insertCredential, authenticationOptions, verifyAssertion, rateLimit, RECENT_MS,
 } from './auth.js';
-import { HttpError, fail, now, randomId, freshness, normalizeHandle, handleProblem, safeEqual, DAY } from './util.js';
-import { newCode, normalizeCode } from './words.js';
+import { HttpError, fail, now, randomId, freshness, normalizeHandle, handleProblem, DAY } from './util.js';
+import { newCode } from './words.js';
 import { signReceipt, jwks } from './receipts.js';
 import { notifyUser, pushConfigured } from './push.js';
 
 const CHECK_TTL_MS = 10 * 60 * 1000;
-const MAX_CODE_ATTEMPTS = 5;
+// After the face check, the sender has this long to confirm the words were read back.
+const CONFIRM_TTL_MS = 10 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
 
 const app = new Hono();
@@ -344,6 +345,10 @@ app.delete('/api/blocks/:handle', async (c) => {
 });
 
 // ---------- Human checks ----------
+// Flow: the sender creates a check. The answerer passes a fresh face check on their own phone, which
+// reveals three words to them ('answered'). They read the words back to the sender over the call or
+// chat, and the sender confirms they match ('passed'). The sender never sees the words before the
+// face check, so there's nothing a scammer can coax out of them early.
 
 async function loadCheck(env, id) {
   const check = await env.DB.prepare(
@@ -355,12 +360,14 @@ async function loadCheck(env, id) {
      WHERE k.id = ?`,
   ).bind(String(id ?? '')).first();
   if (!check) fail(404, 'no_such_check', "That check doesn't exist.");
-  if (check.status === 'pending' && check.expires_at < now()) {
-    await env.DB.prepare("UPDATE checks SET status = 'expired' WHERE id = ? AND status = 'pending'").bind(check.id).run();
+  if (['pending', 'answered'].includes(check.status) && check.expires_at < now()) {
+    await env.DB.prepare("UPDATE checks SET status = 'expired' WHERE id = ? AND status IN ('pending', 'answered')").bind(check.id).run();
     check.status = 'expired';
   }
   return check;
 }
+
+const WORDS_REVEALED = ['answered', 'passed', 'failed'];
 
 function checkView(env, check, viewer) {
   const role = viewer?.id === check.from_user_id ? 'from' : viewer && (check.to_user_id ? viewer.id === check.to_user_id : true) ? 'to' : 'viewer';
@@ -374,12 +381,17 @@ function checkView(env, check, viewer) {
     expiresAt: check.expires_at,
     answeredAt: check.answered_at,
     answeredBy: check.answered_handle,
-    attemptsLeft: Math.max(0, MAX_CODE_ATTEMPTS - check.attempts),
+    confirmedAt: check.confirmed_at,
   };
+  const answeredByViewer = viewer && check.answered_by === viewer.id;
   if (role === 'from') {
-    Object.assign(view, { code: check.code, link: `${env.ORIGIN}/c/${check.id}#${check.code}`, keyType: check.key_type, receipt: check.receipt });
+    Object.assign(view, { link: `${env.ORIGIN}/c/${check.id}`, keyType: check.key_type, receipt: check.receipt });
+    if (WORDS_REVEALED.includes(check.status)) view.code = check.code;
   }
-  if (role === 'to' && check.answered_by === viewer.id) view.receipt = check.receipt;
+  if (role === 'to' && answeredByViewer) {
+    if (WORDS_REVEALED.includes(check.status)) view.code = check.code;
+    view.receipt = check.receipt;
+  }
   return view;
 }
 
@@ -387,15 +399,6 @@ function canAnswer(check, viewer) {
   if (check.from_user_id === viewer.id) fail(400, 'own_check', "You can't answer your own check.");
   if (check.to_user_id && check.to_user_id !== viewer.id) fail(403, 'not_for_you', `This check is for @${check.to_handle}.`);
   if (check.status !== 'pending') fail(409, 'not_pending', `This check is already ${check.status}.`);
-}
-
-async function spendAttempt(env, check, code) {
-  if (safeEqual(normalizeCode(code), check.code)) return;
-  const attempts = check.attempts + 1;
-  const status = attempts >= MAX_CODE_ATTEMPTS ? 'failed' : 'pending';
-  await env.DB.prepare('UPDATE checks SET attempts = ?, status = ? WHERE id = ?').bind(attempts, status, check.id).run();
-  if (status === 'failed') fail(400, 'too_many_attempts', 'Too many wrong codes. This check has failed.');
-  fail(400, 'wrong_code', `Those words don't match. ${MAX_CODE_ATTEMPTS - attempts} tries left.`);
 }
 
 app.post('/api/checks', async (c) => {
@@ -412,9 +415,8 @@ app.post('/api/checks', async (c) => {
   await rateLimit(c.env, `check:${me.id}`, 30, DAY);
   const t = now();
   const id = randomId(12);
-  const code = newCode();
   await c.env.DB.prepare('INSERT INTO checks (id, from_user_id, to_user_id, code, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(id, me.id, target?.id ?? null, code, t, t + CHECK_TTL_MS).run();
+    .bind(id, me.id, target?.id ?? null, newCode(), t, t + CHECK_TTL_MS).run();
   if (target) {
     c.executionCtx.waitUntil(notifyUser(c.env, target.id, {
       title: `@${me.handle} wants you to prove you're human`,
@@ -434,7 +436,7 @@ app.get('/api/checks', async (c) => {
     FROM checks k JOIN users f ON f.id = k.from_user_id LEFT JOIN users t ON t.id = k.to_user_id LEFT JOIN users a ON a.id = k.answered_by`;
   const incoming = await c.env.DB.prepare(`${select} WHERE k.to_user_id = ? AND k.status = 'pending' AND k.expires_at > ? ORDER BY k.created_at DESC`).bind(me, t).all();
   const recent = await c.env.DB.prepare(`${select} WHERE k.from_user_id = ? OR k.to_user_id = ? OR k.answered_by = ? ORDER BY k.created_at DESC LIMIT 20`).bind(me, me, me).all();
-  const settle = (k) => (k.status === 'pending' && k.expires_at < t ? { ...k, status: 'expired' } : k);
+  const settle = (k) => (['pending', 'answered'].includes(k.status) && k.expires_at < t ? { ...k, status: 'expired' } : k);
   return c.json({
     incoming: incoming.results.map((k) => checkView(c.env, k, session.user)),
     recent: recent.results.map((k) => checkView(c.env, settle(k), session.user)),
@@ -451,48 +453,75 @@ app.post('/api/checks/:id/begin', async (c) => {
   const session = await requireSession(c);
   const check = await loadCheck(c.env, c.req.param('id'));
   canAnswer(check, session.user);
-  await spendAttempt(c.env, check, (await body(c)).code);
   const options = await authenticationOptions(c.env, session.user.id);
   const ceremonyId = await startCeremony(c.env, { purpose: 'answer', challenge: options.challenge, userId: session.user.id, ref: check.id });
   return c.json({ ceremonyId, options });
 });
 
+// The face check. Success reveals the three words to the answerer, to read back to the sender.
 app.post('/api/checks/:id/finish', async (c) => {
   const session = await requireSession(c);
   const me = session.user;
-  const { ceremonyId, code, response } = await body(c);
+  const { ceremonyId, response } = await body(c);
   const ceremony = await takeCeremony(c.env, ceremonyId, 'answer');
   const check = await loadCheck(c.env, c.req.param('id'));
   if (ceremony.ref !== check.id || ceremony.user_id !== me.id) fail(403, 'wrong_check', "That confirmation doesn't belong to this check.");
   canAnswer(check, me);
-  if (!safeEqual(normalizeCode(code), check.code)) fail(400, 'wrong_code', "Those words don't match.");
   const { deviceType } = await verifyAssertion(c.env, ceremony, response, { userId: me.id });
 
   const t = now();
-  const keyKind = deviceType === 'singleDevice' ? 'device' : 'synced';
+  const update = await c.env.DB.prepare(
+    "UPDATE checks SET status = 'answered', answered_at = ?, answered_by = ?, key_type = ?, expires_at = ? WHERE id = ? AND status = 'pending'",
+  ).bind(t, me.id, deviceType === 'singleDevice' ? 'device' : 'synced', t + CONFIRM_TTL_MS, check.id).run();
+  if (!update.meta.changes) fail(409, 'not_pending', 'This check was already answered.');
+  await markPresent(c.env, me.id, session.tokenHash);
+
+  c.executionCtx.waitUntil(notifyUser(c.env, check.from_user_id, {
+    title: `@${me.handle} passed the face check`,
+    body: 'Now have them read you the three words.',
+    url: `/c/${check.id}`,
+    tag: check.id,
+  }));
+  return c.json(checkView(c.env, await loadCheck(c.env, check.id), me));
+});
+
+// The sender heard the words read back (or didn't). Only then does a check pass.
+app.post('/api/checks/:id/confirm', async (c) => {
+  const session = await requireSession(c);
+  const me = session.user;
+  const check = await loadCheck(c.env, c.req.param('id'));
+  if (check.from_user_id !== me.id) fail(403, 'not_yours', 'Only the person who sent this check can confirm it.');
+  if (check.status !== 'answered') fail(409, 'not_answered', `This check is ${check.status}, so there's nothing to confirm.`);
+  const { matched } = await body(c);
+  const t = now();
+
+  if (matched !== true) {
+    await c.env.DB.prepare("UPDATE checks SET status = 'failed', confirmed_at = ? WHERE id = ? AND status = 'answered'").bind(t, check.id).run();
+    return c.json(checkView(c.env, await loadCheck(c.env, check.id), me));
+  }
+
   const receipt = await signReceipt(c.env, {
     iss: c.env.ORIGIN,
     typ: 'human-check',
     jti: check.id,
-    sub: me.handle,
-    aud: check.from_handle,
+    sub: check.answered_handle,
+    aud: me.handle,
     iat: Math.floor(t / 1000),
     result: 'passed',
     uv: true,
-    code_matched: true,
-    key: keyKind,
+    words_confirmed: true,
+    key: check.key_type,
     sent_at: Math.floor(check.created_at / 1000),
+    face_at: Math.floor(check.answered_at / 1000),
   });
-  const update = await c.env.DB.prepare(
-    "UPDATE checks SET status = 'passed', answered_at = ?, answered_by = ?, key_type = ?, receipt = ? WHERE id = ? AND status = 'pending'",
-  ).bind(t, me.id, keyKind, receipt, check.id).run();
-  if (!update.meta.changes) fail(409, 'not_pending', 'This check was already answered.');
-  await c.env.DB.prepare('UPDATE users SET last_check_at = ?, checks_passed = checks_passed + 1 WHERE id = ?').bind(t, me.id).run();
-  await c.env.DB.prepare('UPDATE sessions SET verified_at = ? WHERE token_hash = ?').bind(t, session.tokenHash).run();
+  const update = await c.env.DB.prepare("UPDATE checks SET status = 'passed', confirmed_at = ?, receipt = ? WHERE id = ? AND status = 'answered'")
+    .bind(t, receipt, check.id).run();
+  if (!update.meta.changes) fail(409, 'not_answered', 'This check already changed. Reload to see it.');
+  await c.env.DB.prepare('UPDATE users SET checks_passed = checks_passed + 1 WHERE id = ?').bind(check.answered_by).run();
 
-  c.executionCtx.waitUntil(notifyUser(c.env, check.from_user_id, {
-    title: `@${me.handle} passed your check`,
-    body: 'A live face confirmed it on their phone just now.',
+  c.executionCtx.waitUntil(notifyUser(c.env, check.answered_by, {
+    title: `@${me.handle} confirmed you're human`,
+    body: 'Your check passed.',
     url: `/c/${check.id}`,
     tag: check.id,
   }));

@@ -10,12 +10,11 @@ It works next to any channel (phone calls, DMs, dating apps, email), so it needs
 
 1. **Get a handle.** Signing up creates a passkey: a key sealed inside your phone's security chip that only unlocks with your face, fingerprint, or passcode. The server only ever sees the public half.
 2. **Share it anywhere.** Say it on a call, put it in your bio, or show the QR code.
-3. **Anyone can check you.** They send a check, which comes with three random words (`album · puppet · meteor`).
-   - On a call, they say the words out loud.
-   - In a chat, they send a link that carries the words.
-4. **You answer with your face.** You enter the words, and your phone signs that exact check after confirming it's you. The server verifies the signature and the words, and the sender sees **"@you is a live human"** within seconds.
+3. **Anyone can check you.** They send a check. On a call you just open the app; in a chat they send you a link.
+4. **You answer with your face.** Your phone signs that exact check after confirming it's you, and only then shows you three random words (`album · puppet · meteor`).
+5. **You read the words back.** The sender sees the same words (only after your face check), confirms they match, and gets **"@you is a live human"**.
 
-The three words are what tie your handle to *this* conversation: only the person who heard them can answer, so a scammer can't borrow someone else's handle.
+The three words are what tie your handle to *this* conversation. If a scammer gives out someone else's handle, the real owner might pass the face check, but the scammer won't know the words. The sender never sees the words before the face check, so there's nothing to trick out of them.
 
 Profiles show a freshness badge (**checked in today / this week / overdue**). A daily glance keeps it fresh. Exact times are never shown to others.
 
@@ -23,7 +22,7 @@ Profiles show a freshness badge (**checked in today / this week / overdue**). A 
 
 A pass proves:
 - Someone unlocked the phone that owns that handle, within the last few minutes.
-- That person got the three words from the sender, so they're the one in the conversation.
+- That person read the three words back to the sender, so they're the one in the conversation.
 - A bot or AI agent on a server can't answer on its own. It would need the phone *and* the person.
 
 A pass does **not** prove:
@@ -38,7 +37,7 @@ A pass does **not** prove:
 - **Passkeys (WebAuthn) with user verification required** on every sign-up, sign-in, check-in, and answer. Passkeys without face, fingerprint, or passcode are rejected.
 - **Phishing-proof:** signatures are bound to this site's domain, and signatures made for any other site are refused.
 - **Every confirmation is single-use:** each passkey prompt gets a server-side challenge that's deleted when used, so it can't be replayed.
-- **Checks are bound to one person and one moment:** a check addressed to `@jordan` can only be answered by `@jordan`'s passkey, within 10 minutes. Five wrong word guesses fail it for good. The person answering is never sent the words; they have to hear them from the sender.
+- **Checks are bound to one person and one moment:** a check addressed to `@jordan` can only be answered by `@jordan`'s passkey, within 10 minutes. The words appear only after that face check, and the check passes only when the sender confirms they were read back. Neither side sees the words before the face check.
 - **Signed receipts:** every passed check produces a standard JWT (ES256). Anyone can verify it with the public key at `/.well-known/jwks.json`, or on the `/verify` page, without trusting the site's screens.
 - **Abuse limits:** one person can check another at most 3 times an hour (30 checks a day total). Everyone controls who can check them (anyone, only people they added, or nobody), and can block.
 - **Sensitive changes need a fresh face check:** adding or removing a passkey, or deleting the account.
@@ -63,7 +62,7 @@ In another terminal:
 npm test
 ```
 
-The tests drive the real server with a software passkey that makes genuine signatures. They cover the full check flow, wrong words, replays, phishing-origin signatures, missing face check, rate limits, blocking, receipts, and push encryption.
+The tests drive the real server with a software passkey that makes genuine signatures. They cover the full check flow (face check, words read back, sender confirms), words that didn't match, replays, phishing-origin signatures, missing face check, rate limits, blocking, receipts, and push encryption.
 
 Passkeys only work on `localhost` or a real HTTPS domain. To try it on your phone before deploying, deploy it (it's free).
 

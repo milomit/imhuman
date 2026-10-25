@@ -52,8 +52,8 @@ class Client {
     return this.ceremony('/api/login/begin', '/api/login/finish');
   }
 
-  answer(id, code) {
-    return this.ceremony(`/api/checks/${id}/begin`, `/api/checks/${id}/finish`, { code });
+  answer(id) {
+    return this.ceremony(`/api/checks/${id}/begin`, `/api/checks/${id}/finish`);
   }
 }
 
@@ -105,37 +105,49 @@ test('signing out and back in with the passkey works', async () => {
 
 let receipt;
 
-test('the full prove-it check: send, answer with the words and a fresh face check, see the result', async () => {
+test('the full prove-it check: face check reveals the words, they read them back, the sender confirms', async () => {
   const check = await sam.call('POST', '/api/checks', { to: handles.jordan });
   assert.equal(check.http, 200, JSON.stringify(check));
   assert.equal(check.role, 'from');
-  assert.equal(check.code.split('-').length, 3);
-  assert.ok(check.link.endsWith(`#${check.code}`));
+  assert.equal(check.code, undefined, 'the sender must not see the words before the face check');
+  assert.ok(!check.link.includes('#'), 'the link must not carry the words');
 
   const jordanView = await jordan.call('GET', `/api/checks/${check.id}`);
   assert.equal(jordanView.role, 'to');
-  assert.equal(jordanView.code, undefined, 'the person answering must never be sent the words');
+  assert.equal(jordanView.code, undefined, 'the answerer must not see the words before the face check');
 
   const inbox = await jordan.call('GET', '/api/checks');
   assert.ok(inbox.incoming.some((k) => k.id === check.id));
 
-  const wrong = await jordan.call('POST', `/api/checks/${check.id}/begin`, { code: 'apple-apple-apple' });
-  assert.equal(wrong.error, 'wrong_code');
-
-  const intruder = await mallory.call('POST', `/api/checks/${check.id}/begin`, { code: check.code });
+  const intruder = await mallory.call('POST', `/api/checks/${check.id}/begin`);
   assert.equal(intruder.http, 403, 'someone else cannot answer a check addressed to jordan');
 
-  const passed = await jordan.answer(check.id, check.code.replace(/-/g, ' ').toUpperCase());
-  assert.equal(passed.http, 200, JSON.stringify(passed));
+  const early = await sam.call('POST', `/api/checks/${check.id}/confirm`, { matched: true });
+  assert.equal(early.http, 409, 'nothing to confirm before the face check');
+
+  const answered = await jordan.answer(check.id);
+  assert.equal(answered.http, 200, JSON.stringify(answered));
+  assert.equal(answered.status, 'answered');
+  assert.equal(answered.code.split('-').length, 3, 'the face check reveals three words to the answerer');
+
+  const samSees = await sam.call('GET', `/api/checks/${check.id}`);
+  assert.equal(samSees.status, 'answered');
+  assert.equal(samSees.code, answered.code, 'the sender now sees the same words to compare');
+  assert.equal(samSees.receipt, null, 'no receipt until the sender confirms');
+
+  const notYours = await jordan.call('POST', `/api/checks/${check.id}/confirm`, { matched: true });
+  assert.equal(notYours.http, 403, 'only the sender can confirm');
+
+  const passed = await sam.call('POST', `/api/checks/${check.id}/confirm`, { matched: true });
+  assert.equal(passed.status, 'passed');
   assert.equal(passed.answeredBy, handles.jordan);
+  assert.equal(passed.keyType, 'synced');
+  receipt = passed.receipt;
 
-  const samView = await sam.call('GET', `/api/checks/${check.id}`);
-  assert.equal(samView.status, 'passed');
-  assert.equal(samView.answeredBy, handles.jordan);
-  assert.equal(samView.keyType, 'synced');
-  receipt = samView.receipt;
+  const jordanAfter = await jordan.call('GET', `/api/checks/${check.id}`);
+  assert.equal(jordanAfter.receipt, receipt, 'the answerer gets the receipt too');
 
-  const again = await jordan.call('POST', `/api/checks/${check.id}/begin`, { code: check.code });
+  const again = await jordan.call('POST', `/api/checks/${check.id}/begin`);
   assert.equal(again.http, 409, 'a check can only be answered once');
 });
 
@@ -145,6 +157,7 @@ test('receipts verify against the published key, and tampering is caught', async
   assert.equal(good.claims.sub, handles.jordan);
   assert.equal(good.claims.aud, handles.sam);
   assert.equal(good.claims.result, 'passed');
+  assert.equal(good.claims.words_confirmed, true);
 
   const [h, p, s] = receipt.split('.');
   const claims = JSON.parse(Buffer.from(p, 'base64url'));
@@ -153,39 +166,44 @@ test('receipts verify against the published key, and tampering is caught', async
   assert.equal((await verifyReceipt(forged, `${BASE}/.well-known/jwks.json`)).valid, false);
 });
 
-test('a signature made for another website is refused (phishing protection)', async () => {
+test('if the words read back are wrong, the sender says no and the check fails', async () => {
   const check = await sam.call('POST', '/api/checks', { to: handles.jordan });
-  const started = await jordan.call('POST', `/api/checks/${check.id}/begin`, { code: check.code });
-  const response = await jordan.phone.get(started.options, { origin: 'https://phishy.example' });
-  const res = await jordan.call('POST', `/api/checks/${check.id}/finish`, { code: check.code, ceremonyId: started.ceremonyId, response });
+  await jordan.answer(check.id);
+  const failed = await sam.call('POST', `/api/checks/${check.id}/confirm`, { matched: false });
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.receipt, null);
+  const late = await sam.call('POST', `/api/checks/${check.id}/confirm`, { matched: true });
+  assert.equal(late.http, 409, 'a failed check cannot be flipped to passed');
+});
+
+test('a signature made for another website is refused (phishing protection)', async () => {
+  const check = await sam.call('POST', '/api/checks', { to: handles.mallory });
+  const started = await mallory.call('POST', `/api/checks/${check.id}/begin`);
+  const response = await mallory.phone.get(started.options, { origin: 'https://phishy.example' });
+  const res = await mallory.call('POST', `/api/checks/${check.id}/finish`, { ceremonyId: started.ceremonyId, response });
   assert.equal(res.http, 400);
   assert.equal(res.error, 'passkey_rejected');
+  assert.equal((await mallory.call('GET', `/api/checks/${check.id}`)).code, undefined, 'a failed face check reveals nothing');
 });
 
 test('one passkey confirmation cannot be replayed', async () => {
-  const check = await sam.call('POST', '/api/checks', { to: handles.jordan });
-  const started = await jordan.call('POST', `/api/checks/${check.id}/begin`, { code: check.code });
-  const response = await jordan.phone.get(started.options);
-  const first = await jordan.call('POST', `/api/checks/${check.id}/finish`, { code: check.code, ceremonyId: started.ceremonyId, response });
+  const check = await sam.call('POST', '/api/checks', { to: handles.mallory });
+  const started = await mallory.call('POST', `/api/checks/${check.id}/begin`);
+  const response = await mallory.phone.get(started.options);
+  const first = await mallory.call('POST', `/api/checks/${check.id}/finish`, { ceremonyId: started.ceremonyId, response });
   assert.equal(first.http, 200);
-  const replay = await jordan.call('POST', `/api/checks/${check.id}/finish`, { code: check.code, ceremonyId: started.ceremonyId, response });
+  const replay = await mallory.call('POST', `/api/checks/${check.id}/finish`, { ceremonyId: started.ceremonyId, response });
   assert.equal(replay.error, 'ceremony_expired');
 });
 
-test('five wrong guesses fail the check for good', async () => {
-  const check = await sam.call('POST', '/api/checks', { to: handles.mallory });
-  let last;
-  for (let i = 0; i < 5; i++) last = await mallory.call('POST', `/api/checks/${check.id}/begin`, { code: 'zebra-zebra-zebra' });
-  assert.equal(last.error, 'too_many_attempts');
-  assert.equal((await sam.call('GET', `/api/checks/${check.id}`)).status, 'failed');
-});
-
 test('open links can be answered by whoever has them, and the sender learns their handle', async () => {
-  const check = await sam.call('POST', '/api/checks', {});
+  const check = await jordan.call('POST', '/api/checks', {});
   assert.equal(check.to, null);
-  const res = await mallory.answer(check.id, check.code);
+  const res = await mallory.answer(check.id);
   assert.equal(res.http, 200, JSON.stringify(res));
-  assert.equal((await sam.call('GET', `/api/checks/${check.id}`)).answeredBy, handles.mallory);
+  const confirmed = await jordan.call('POST', `/api/checks/${check.id}/confirm`, { matched: true });
+  assert.equal(confirmed.status, 'passed');
+  assert.equal(confirmed.answeredBy, handles.mallory);
 });
 
 test('decline, block, and "only people I added" are respected', async () => {
@@ -214,7 +232,7 @@ test('one person cannot spam another with checks', async () => {
 test('public profiles show freshness but never exact times', async () => {
   const p = await new Client().call('GET', `/api/users/${handles.jordan}`);
   assert.equal(p.freshness, 'today');
-  assert.ok(p.checksPassed >= 2);
+  assert.equal(p.checksPassed, 1);
   assert.equal(p.lastCheckAt, undefined);
   const badge = await fetch(`${BASE}/api/badge/${handles.jordan}.svg`);
   assert.match(await badge.text(), /human · today/);

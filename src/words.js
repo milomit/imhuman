@@ -1,5 +1,5 @@
 // 256 short, common words that are hard to mishear, so a code can be read aloud on a call.
-// Three words give 2^24 (about 16.7 million) combinations; with five tries per check, guessing is hopeless.
+// Three words give 2^24 (about 16.7 million) combinations, so nobody can guess them.
 export const WORDS = [
   'acorn', 'actor', 'alarm', 'album', 'alley', 'amber', 'angle', 'ankle', 'apple', 'apron', 'arrow', 'atlas',
   'attic', 'autumn', 'bacon', 'badge', 'bagel', 'baker', 'bamboo', 'banana', 'banjo', 'barn', 'basket', 'beach',
@@ -32,13 +32,4 @@ if (WORDS.length !== 256 || new Set(WORDS).size !== 256) {
 export function newCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(3));
   return Array.from(bytes, (b) => WORDS[b]).join('-');
-}
-
-// Accept "Maple rocket, tiger", "maple-rocket-tiger", etc.
-export function normalizeCode(raw) {
-  return String(raw ?? '')
-    .toLowerCase()
-    .split(/[^a-z]+/)
-    .filter(Boolean)
-    .join('-');
 }

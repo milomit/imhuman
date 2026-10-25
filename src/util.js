@@ -42,15 +42,6 @@ export function concat(...parts) {
   return out;
 }
 
-// Constant-time string comparison, so response timing can't leak how much of a code matched.
-export function safeEqual(a, b) {
-  const x = enc.encode(a);
-  const y = enc.encode(b);
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
-  return diff === 0;
-}
-
 export const now = () => Date.now();
 
 export const DAY = 24 * 60 * 60 * 1000;

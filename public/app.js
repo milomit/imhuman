@@ -317,7 +317,7 @@ async function sendCheck(to, button) {
 }
 
 function checkLine(k) {
-  const STATUS = { passed: ['passed', 'today'], pending: ['waiting', ''], declined: ['declined', 'overdue'], expired: ['expired', ''], failed: ['failed', 'overdue'] };
+  const STATUS = { passed: ['passed', 'today'], pending: ['waiting', ''], answered: [k.role === 'from' ? 'confirm words' : 'waiting', k.role === 'from' ? 'overdue' : ''], declined: ['declined', 'overdue'], expired: ['expired', ''], failed: ['failed', 'overdue'] };
   const [word, cls] = STATUS[k.status] ?? [k.status, ''];
   const who = k.role === 'from'
     ? `You checked ${k.to ? `@${esc(k.to)}` : k.answeredBy ? `@${esc(k.answeredBy)} (link)` : 'an open link'}`
@@ -438,54 +438,72 @@ async function viewHome() {
 }
 
 async function viewCheck(id) {
-  const fromLink = words(decodeURIComponent(location.hash.slice(1))).join('-');
-  if (fromLink) {
-    store.set(`hid-code-${id}`, fromLink);
-    history.replaceState({}, '', `/c/${id}`);
-  }
-  const linkCode = fromLink || store.get(`hid-code-${id}`) || '';
+  if (location.hash) history.replaceState({}, '', `/c/${id}`);
   let check = await api('GET', `/api/checks/${id}`);
+  const left = () => check.expiresAt - Date.now();
+  const wordsHtml = (code) => esc(showCode(code));
 
   const draw = () => {
-    const left = () => check.expiresAt - Date.now();
-    const target = check.to ? `@${esc(check.to)}` : 'whoever you send it to';
+    const other = check.to ? `@${esc(check.to)}` : 'them';
 
     if (check.role === 'from') {
       if (check.status === 'pending') {
         app.innerHTML = `
           <h1>Waiting for ${check.to ? `@${esc(check.to)}` : 'an answer'}</h1>
           <section class="card">
-            <h3>On a call? Say these three words:</h3>
-            <div class="code" id="words">${esc(showCode(check.code))}</div>
-            <p class="muted small">${check.to ? `@${esc(check.to)} types them into I'm Human and confirms with their face.` : 'They type them into I\'m Human and confirm with their face.'} Only the person who heard you can answer.</p>
+            <ol class="steps">
+              <li><strong>They confirm with their face</strong> on their own phone.</li>
+              <li><strong>Their phone shows three words.</strong> You'll see them too, only after their face check.</li>
+              <li><strong>They read the words to you.</strong> You check that they match.</li>
+            </ol>
           </section>
           <section class="card">
-            <h3>In a chat? Send this link instead:</h3>
+            <h3>In a chat? Send them this link:</h3>
             <div class="linkbox">${esc(check.link)}</div>
             <div class="row" data-mt>
               <button class="small grow" id="copy">Copy link</button>
               ${navigator.share ? '<button class="small grow" id="share">Share</button>' : ''}
             </div>
           </section>
-          <p class="status"><span class="dot"></span><span>Waiting for ${target}. Expires in <strong id="left">${clock(left())}</strong></span></p>`;
+          <p class="status"><span class="dot"></span><span>Waiting for ${other}. Expires in <strong id="left">${clock(left())}</strong></span></p>`;
         $('#copy').addEventListener('click', () => copy(check.link, 'Link copied'));
         $('#share')?.addEventListener('click', () => navigator.share({ text: `Prove you're human: ${check.link}` }).catch(() => {}));
-        every(1000, () => { const el = $('#left'); if (el) el.textContent = clock(left()); });
+        return;
+      }
+      if (check.status === 'answered') {
+        app.innerHTML = `
+          <h1>@${esc(check.answeredBy)} passed the face check</h1>
+          <p class="lead">Now ask them to read you the three words on their screen. Don't say the words first.</p>
+          <section class="card">
+            <h3>Did they say these words?</h3>
+            <div class="code">${wordsHtml(check.code)}</div>
+            <div class="stack">
+              <button class="primary block" id="yes">Yes, they said them</button>
+              <button class="block" id="no">No, they didn't</button>
+            </div>
+          </section>
+          <p class="faint">You have <strong id="left">${clock(left())}</strong> to confirm.</p>`;
+        const confirmWords = (matched) => async (e) => {
+          const res = await busy(e.currentTarget, () => api('POST', `/api/checks/${id}/confirm`, { matched }));
+          if (res) { check = res; draw(); }
+        };
+        $('#yes').addEventListener('click', confirmWords(true));
+        $('#no').addEventListener('click', confirmWords(false));
         return;
       }
       if (check.status === 'passed') {
         app.innerHTML = `
           <section class="card success">
             <h1>@${esc(check.answeredBy)} is a live human</h1>
-            <p>Their phone confirmed their face, fingerprint, or passcode, and they gave your three words back, ${span(check.answeredAt - check.createdAt)} after you sent this.</p>
+            <p>Their phone confirmed their face, fingerprint, or passcode, and they read your three words back to you.</p>
           </section>
           <section class="card">
             <ul class="facts">
-              <li>The words matched: ${esc(showCode(check.code))}</li>
-              <li>A fresh check on @${esc(check.answeredBy)}'s own phone</li>
+              <li>They read back: ${wordsHtml(check.code)}</li>
+              <li>Face check on @${esc(check.answeredBy)}'s own phone, ${span(check.answeredAt - check.createdAt)} after you sent this</li>
               ${check.keyType ? `<li>${check.keyType === 'device' ? 'Their passkey lives on one device only' : 'Their passkey syncs across their devices'}</li>` : ''}
             </ul>
-            <p class="faint" data-mt>This proves a real person had @${esc(check.answeredBy)}'s phone in hand just now. It doesn't prove who they are in real life. <a href="/how" data-link>What a pass means</a></p>
+            <p class="faint" data-mt>This proves the person you're talking to has @${esc(check.answeredBy)}'s phone in hand right now. It doesn't prove who they are in real life. <a href="/how" data-link>What a pass means</a></p>
           </section>
           <div class="stack">
             <a class="btn block" href="/u/${esc(check.answeredBy)}" data-link>See @${esc(check.answeredBy)}'s page</a>
@@ -496,11 +514,11 @@ async function viewCheck(id) {
         return;
       }
       const WHY = {
+        failed: ["The words didn't match", `Someone passed the face check on ${check.answeredBy ? `@${esc(check.answeredBy)}'s` : 'their'} phone, but the person you're talking to didn't know the words. Be careful with anything they ask for.`],
         declined: [`${check.to ? `@${esc(check.to)}` : 'They'} declined`, "They chose not to answer. If they're asking you for something sensitive, hold off."],
-        expired: ['No answer in time', 'They may just be away. Try again when they can glance at their phone.'],
-        failed: ['Wrong words, too many times', "Someone tried to answer without the right words. That's a red flag."],
+        expired: ['No answer in time', 'The check ran out of time. Try again when they can glance at their phone.'],
       };
-      const [title, text] = WHY[check.status];
+      const [title, text] = WHY[check.status] ?? ['This check is over', ''];
       app.innerHTML = `
         <section class="card warn"><h1>${title}</h1><p>${text}</p></section>
         <div class="stack">
@@ -516,14 +534,13 @@ async function viewCheck(id) {
       app.innerHTML = `
         <h1>@${esc(check.from)} wants ${check.to ? `@${esc(check.to)}` : 'you'} to prove you're human</h1>
         ${check.status === 'pending'
-          ? `<p class="muted">It takes a few seconds: sign in, glance at your phone, done. Expires in <strong id="left">${clock(left())}</strong>.</p>
+          ? `<p class="muted">It takes a few seconds: sign in, glance at your phone, read three words back. Expires in <strong id="left">${clock(left())}</strong>.</p>
              <div class="stack">
                <button class="primary block" id="signin">Sign in to answer</button>
                ${check.to ? '' : '<a class="btn block" href="/join" data-link>Get a handle to answer</a>'}
              </div>`
           : `<div class="card"><p>This check is ${esc(check.status)}.</p></div>`}`;
       $('#signin')?.addEventListener('click', (e) => signIn(e.currentTarget));
-      if (check.status === 'pending') every(1000, () => { const el = $('#left'); if (el) el.textContent = clock(left()); });
       return;
     }
 
@@ -532,9 +549,18 @@ async function viewCheck(id) {
       return;
     }
 
-    if (check.status === 'passed' && check.answeredBy === me.handle) {
+    const mine = check.answeredBy === me.handle;
+    if (mine && check.status === 'answered') {
       app.innerHTML = `
-        <section class="card success"><h1>Done</h1><p>@${esc(check.from)} can now see that you passed.</p></section>
+        <h1>Read these words to @${esc(check.from)}</h1>
+        <div class="code">${wordsHtml(check.code)}</div>
+        <p class="muted">Say them on your call, or type them in your chat. @${esc(check.from)} is checking that they match.</p>
+        <p class="status"><span class="dot"></span><span>Waiting for @${esc(check.from)} to confirm</span></p>`;
+      return;
+    }
+    if (mine && check.status === 'passed') {
+      app.innerHTML = `
+        <section class="card success"><h1>Done</h1><p>@${esc(check.from)} confirmed you're human.</p></section>
         <div class="stack">
           <button class="block" id="receipt">Copy signed receipt</button>
           <a class="btn ghost block" href="/home" data-link>Back home</a>
@@ -542,7 +568,11 @@ async function viewCheck(id) {
       $('#receipt').addEventListener('click', () => copy(check.receipt, 'Receipt copied'));
       return;
     }
-
+    if (mine && check.status === 'failed') {
+      app.innerHTML = `<section class="card warn"><h1>@${esc(check.from)} said the words didn't match</h1><p>If that's a mistake, ask them to send a new check.</p></section>
+        <a class="btn ghost block" href="/home" data-link>Back home</a>`;
+      return;
+    }
     if (check.status !== 'pending') {
       app.innerHTML = `<section class="card"><h1>This check is ${esc(check.status)}</h1><p class="muted">Nothing left to do here.</p><a class="btn" href="/home" data-link>Back home</a></section>`;
       return;
@@ -550,41 +580,16 @@ async function viewCheck(id) {
 
     app.innerHTML = `
       <h1>@${esc(check.from)} wants you to prove you're human</h1>
-      <form id="answer" class="card" novalidate>
-        ${linkCode
-          ? '<p class="good small">The three words came with your link.</p>'
-          : `<label for="code">The three words @${esc(check.from)} told you</label>
-             <input id="code" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="maple rocket tiger">`}
-        <p class="field-note" id="code-note"></p>
-        <button class="primary block" id="go">Answer with Face ID</button>
-      </form>
+      <section class="card">
+        <p>Confirm with your face. Your phone will then show three words. Read them to @${esc(check.from)}.</p>
+        <button class="primary block" id="go">Prove it with Face ID</button>
+      </section>
       <p class="status">Expires in <strong id="left">${clock(left())}</strong></p>
       ${check.to ? '<button class="ghost block" id="decline">Decline</button>' : ''}
       <p class="faint">@${esc(check.from)} will see that @${esc(me.handle)} answered. Nothing else about you is shared.</p>`;
-    every(1000, () => { const el = $('#left'); if (el) el.textContent = clock(left()); });
-    $('#answer').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const code = linkCode || words($('#code').value).join('-');
-      const note = $('#code-note');
-      if (words(code).length !== 3) { note.className = 'field-note bad'; note.textContent = 'Enter all three words.'; return; }
-      note.textContent = '';
-      try {
-        $('#go').disabled = true;
-        check = await ceremony(`/api/checks/${id}/begin`, `/api/checks/${id}/finish`, { code });
-        store.del(`hid-code-${id}`);
-        await refreshMe();
-        draw();
-      } catch (err) {
-        if (err.code === 'wrong_code' || err.code === 'too_many_attempts') {
-          note.className = 'field-note bad';
-          note.textContent = err.message;
-          if (err.code === 'too_many_attempts') { check = await api('GET', `/api/checks/${id}`); setTimeout(draw, 1500); }
-        } else {
-          toast(err.message, true);
-        }
-      } finally {
-        if ($('#go')) $('#go').disabled = false;
-      }
+    $('#go').addEventListener('click', async (e) => {
+      const res = await busy(e.currentTarget, () => ceremony(`/api/checks/${id}/begin`, `/api/checks/${id}/finish`));
+      if (res) { check = res; await refreshMe(); draw(); }
     });
     $('#decline')?.addEventListener('click', async (e) => {
       const res = await busy(e.currentTarget, () => api('POST', `/api/checks/${id}/decline`));
@@ -593,16 +598,15 @@ async function viewCheck(id) {
   };
 
   draw();
-  if (check.status === 'pending') {
-    every(2000, async () => {
-      if (document.hidden) return;
-      const fresh = await api('GET', `/api/checks/${id}`).catch(() => null);
-      if (fresh && fresh.status !== check.status) {
-        check = fresh;
-        draw();
-      }
-    });
-  }
+  every(1000, () => { const el = $('#left'); if (el) el.textContent = clock(left()); });
+  every(2000, async () => {
+    if (document.hidden || !['pending', 'answered'].includes(check.status)) return;
+    const fresh = await api('GET', `/api/checks/${id}`).catch(() => null);
+    if (fresh && fresh.status !== check.status) {
+      check = fresh;
+      draw();
+    }
+  });
 }
 
 async function viewProfile(rawHandle) {
@@ -754,7 +758,7 @@ function viewVerify() {
     const foreign = c.iss && c.iss !== config.origin;
     $('#result').innerHTML = res.valid && !foreign
       ? `<section class="card success"><h2>Real receipt</h2><p>@${esc(c.sub)} passed a human check from @${esc(c.aud)} on ${esc(when)}.</p>
-         <p class="small">Face, fingerprint, or passcode confirmed on their phone${c.code_matched ? ', and the three words matched' : ''}.</p></section>`
+         <p class="small">Face, fingerprint, or passcode confirmed on their phone${c.words_confirmed ? `, and they read the three words back to @${esc(c.aud)}` : ''}.</p></section>`
       : `<section class="card warn"><h2>Not valid</h2><p>${esc(foreign ? `This receipt claims to be from ${c.iss}, not this site.` : res.reason)}</p></section>`;
   });
 }
@@ -764,15 +768,16 @@ function viewHow() {
     <h1>How it works</h1>
     <ol class="steps">
       <li><strong>Your handle is locked to your phone.</strong> When you sign up, your phone makes a passkey: a secret key sealed in its security chip that only opens with your face, fingerprint, or passcode. We only ever see the public half.</li>
-      <li><strong>Someone sends you a check.</strong> It comes with three random words. On a call they say the words; in a chat they send a link that carries them.</li>
-      <li><strong>You answer with your face.</strong> Your phone signs that exact check. We confirm the signature and the words, and they see you passed.</li>
+      <li><strong>Someone sends you a check.</strong> On a call, you just open the app. In a chat, they send you a link.</li>
+      <li><strong>You answer with your face.</strong> Your phone signs that exact check, and only then shows you three random words.</li>
+      <li><strong>You read the words back.</strong> They see the same words, confirm they match, and get a green "live human".</li>
     </ol>
 
     <section class="card">
       <h2>What a pass proves</h2>
       <ul class="facts">
         <li>A person unlocked the phone that owns this handle, just now.</li>
-        <li>That person got the three words from whoever sent the check, so they're the one you're talking to.</li>
+        <li>That person read the three words back to whoever sent the check, so they're the one you're talking to.</li>
         <li>An AI or bot on a server can't answer on its own. It would need the phone and the person.</li>
       </ul>
     </section>
