@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "humanid",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/.well-known/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "humanid",
+      // Replace with the id printed by `npx wrangler d1 create humanid` before deploying.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["17 3 * * *"] },
+  "vars": {
+    "RP_NAME": "Human ID",
+    // For production, set these to your domain, e.g. RP_ID "example.com" and ORIGIN "https://example.com".
+    "RP_ID": "localhost",
+    "ORIGIN": "http://localhost:8787",
+    "VAPID_SUBJECT": "mailto:hello@example.com"
+  }
+  // Secrets (RECEIPT_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY) live in .dev.vars locally
+  // and are set with `npx wrangler secret put <NAME>` in production. Run `npm run setup` to create them.
+}
